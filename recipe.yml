@@ -19,14 +19,43 @@ stages:
     - lpkg --unlock
     - apt-get update
 
-  - name: nvidia-official-driver
+  - name: nvidia-official-repo
     type: shell
     commands:
     - curl -fSsL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/3bf863cc.pub | gpg --dearmor -o /usr/share/keyrings/nvidia-drivers.gpg
     - echo 'deb [signed-by=/usr/share/keyrings/nvidia-drivers.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /' > /etc/apt/sources.list.d/nvidia-drivers.list
     - apt-get update
-    - apt-get install nvidia-driver nvidia-vaapi-driver nvidia-settings nvidia-smi -y
-    - apt-mark hold nvidia-driver nvidia-vaapi-driver nvidia-settings nvidia-smi
+
+  - name: nvidia-official-driver
+    type: shell
+    commands:
+    - apt-mark hold nvidia-kernel-open nvidia-driver nvidia-vaapi-driver nvidia-settings nvidia-persistenced nvidia-smi libnvidia-cfg1 libnvidia-glcore libnvidia-glvkspirv libnvidia-gpucomp libnvidia-fbc1 nvidia-container-toolkit
+    modules:
+      - name: install-nvidia
+        type: apt
+        source:
+          packages:
+          - nvidia-kernel-open
+          - nvidia-driver
+          - nvidia-vaapi-driver
+          - nvidia-settings
+          - nvidia-persistenced
+          - nvidia-smi
+          - libnvidia-cfg1
+          - libnvidia-glcore
+          - libnvidia-glvkspirv
+          - libnvidia-gpucomp
+          - libnvidia-fbc1
+          - nvidia-container-toolkit
+
+  - name: nvidia-sysd-units
+    type: shell
+    commands:
+    - mkdir -p /etc/systemd/system/systemd-suspend.service.wants
+    - mkdir -p /etc/systemd/system/systemd-hibernate.service.wants
+    - ln -s /usr/lib/systemd/system/nvidia-suspend.service /etc/systemd/system/systemd-suspend.service.wants/nvidia-suspend.service
+    - ln -s /usr/lib/systemd/system/nvidia-hibernate.service /etc/systemd/system/systemd-hibernate.service.wants/nvidia-hibernate.service
+    - ln -s /usr/lib/systemd/system/nvidia-resume.service /etc/systemd/system/systemd-hibernate.service.wants/nvidia-resume.service
 
   - name: extra-utilities
     type: apt
@@ -34,20 +63,12 @@ stages:
       packages:
       - switcheroo-control
 
-  - name: nvidia-ctk-repo
-    type: shell
-    commands:
-      - curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-      - curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-      - apt-get update
-      - apt-get install nvidia-container-toolkit -y
-      - apt-mark hold nvidia-container-toolkit
-
   - name: vanilla-tools
     type: shell
     source:
       type: tar
-      url: https://github.com/Vanilla-OS/vanilla-tools/releases/download/continuous/vanilla-tools.tar.gz
+      url: https://github.com/Vanilla-OS/vanilla-tools/releases/download/v1.0.0/vanilla-tools.tar.gz
+      checksum: 0e1d92d9c9154f9a115e97b40ff692afa52ddd0d9f770a8ec67440bf1a48aa72
     commands:
     - mkdir -p /usr/bin
     - cp /sources/vanilla-tools/vanilla-tools/nrun /usr/bin/nrun
@@ -55,36 +76,11 @@ stages:
     - chmod +x /usr/bin/nrun
     - chmod +x /usr/bin/prime-switch
 
-  - name: vanilla-prime-utility
-    type: meson
-    source:
-      type: git
-      url: https://github.com/Vanilla-OS/vanilla-prime-utility
-      branch: main
-      commit: latest
-    modules:
-    - name: vanilla-prime-utility-deps-install
-      type: apt
-      source:
-        packages:
-        - build-essential
-        - gettext
-        - libadwaita-1-dev
-        - meson
-
-  - name: enable-wayland
-    type: shell
-    commands:
-    - mkdir -p /etc/udev/rules.d
-    - ln -s /dev/null /etc/udev/rules.d/61-gdm.rules
-
   - name: cleanup
     type: shell
     commands:
-    - apt autoremove -y
-    - apt clean
-    - apt remove -y zutty gnome-shell-extension-prefs
-    - SUDO_FORCE_REMOVE=yes apt purge -y sudo
+    - apt-get autoremove -y
+    - apt-get clean
     - lpkg --lock
 
   - name: fsguard
